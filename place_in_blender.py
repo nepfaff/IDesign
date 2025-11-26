@@ -143,5 +143,87 @@ for OBJS in MSH_OBJS:
 bpy.ops.object.select_all(action='DESELECT')
 delete_empty_objects()
 
-# TODO: Generate the room with the room dimensions
-create_room(4.0, 4.0, 2.5)
+# Get room dimensions from scene graph
+room_width = 4.0
+room_depth = 4.0
+room_height = 2.5
+
+for item in data:
+    if item["new_object_id"] == "middle of the room":
+        room_width = item["size_in_meters"]["length"]
+        room_depth = item["size_in_meters"]["width"]
+    if item["new_object_id"] == "ceiling":
+        room_height = item["position"]["z"]
+
+# Don't create room walls for cleaner render - just show furniture
+# create_room(room_width, room_depth, room_height)
+
+# Create a simple floor plane instead
+bpy.ops.mesh.primitive_plane_add(size=max(room_width, room_depth) * 1.5, location=(room_width/2, room_depth/2, 0))
+floor = bpy.context.active_object
+floor.name = "Floor"
+
+# Setup camera for rendering
+def setup_camera_and_render(room_width, room_depth, room_height, output_path="render.png"):
+    from mathutils import Vector
+
+    # Position camera to see the whole room from above corner
+    camera = bpy.data.objects.get('Camera')
+    if camera is None:
+        bpy.ops.object.camera_add()
+        camera = bpy.context.active_object
+
+    # Room center (looking at floor level where furniture is)
+    room_center = Vector((room_width/2, room_depth/2, 0.5))
+
+    # Position camera high above looking down into room
+    camera.location = (room_width/2, -2, room_height * 2.5)
+
+    # Point camera at room center using direction vector
+    direction = room_center - camera.location
+    rot_quat = direction.to_track_quat('-Z', 'Y')
+    camera.rotation_euler = rot_quat.to_euler()
+
+    # Wider field of view
+    camera.data.lens = 24
+
+    # Set as active camera
+    bpy.context.scene.camera = camera
+
+    # Remove existing lights
+    for obj in bpy.data.objects:
+        if obj.type == 'LIGHT':
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    # Add sun light
+    bpy.ops.object.light_add(type='SUN', location=(room_width/2, room_depth/2, room_height + 2))
+    sun = bpy.context.active_object
+    sun.data.energy = 3
+    sun.rotation_euler = (math.radians(45), 0, math.radians(45))
+
+    # Add point light inside room for fill
+    bpy.ops.object.light_add(type='POINT', location=(room_width/2, room_depth/2, room_height - 0.5))
+    point = bpy.context.active_object
+    point.data.energy = 500
+
+    # Set world background to light blue-gray
+    bpy.context.scene.world.node_tree.nodes["Background"].inputs[0].default_value = (0.7, 0.75, 0.8, 1)
+
+    # Render settings
+    bpy.context.scene.render.resolution_x = 1920
+    bpy.context.scene.render.resolution_y = 1080
+    bpy.context.scene.render.filepath = output_path
+    bpy.context.scene.render.image_settings.file_format = 'PNG'
+
+    # Render
+    bpy.ops.render.render(write_still=True)
+    print(f"Render saved to: {output_path}")
+
+# Save blend file
+blend_output = os.path.join(os.getcwd(), "scene.blend")
+bpy.ops.wm.save_as_mainfile(filepath=blend_output)
+print(f"Blend file saved to: {blend_output}")
+
+# Render the scene
+render_output = os.path.join(os.getcwd(), "render.png")
+setup_camera_and_render(room_width, room_depth, room_height, render_output)

@@ -4,10 +4,24 @@ import numpy as np
 import cv2
 from copy import copy, deepcopy
 import random
+import re
 
 from constraint_functions import get_above_constraint, get_behind_constraint, get_in_corner_constraint, get_in_front_constraint, get_left_of_constraint, get_right_of_constraint, get_on_constraint, get_under_contraint
 
 ROOM_LAYOUT_ELEMENTS = ["south_wall", "north_wall", "west_wall", "east_wall", "ceiling", "middle of the room"]
+
+
+def extract_json_from_response(content):
+    """Extract JSON from a response that may contain markdown code blocks."""
+    if not content:
+        return content
+    # Try to extract JSON from markdown code blocks
+    pattern = r'```(?:json)?\s*([^`]+)\s*```'
+    match = re.search(pattern, content, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    # If no code block, return as-is
+    return content
 
 def get_room_priors(room_dimensions):
     x_mid = room_dimensions[0] / 2
@@ -60,15 +74,18 @@ def get_rotation(obj_A, scene_graph):
         rot = layout_rot[obj_A["facing"]]
     elif obj_A["new_object_id"] in layout_rot.keys():
         rot = layout_rot[obj_A["new_object_id"]]
-    else: 
+    else:
         parents = []
         for x in obj_A["placement"]["objects_in_room"]:
+            # Skip room layout elements
+            if x["object_id"] in ROOM_LAYOUT_ELEMENTS:
+                continue
             try:
                 p = [element for element in scene_graph if element.get("new_object_id") == x["object_id"]][0]
+                parents.append(p)
             except:
-                print(f"Object {x['object_id']} not found in scene graph!")
-                raise ValueError("Object not found in scene graph!")
-            parents.append(p)
+                print(f"Warning: Object {x['object_id']} not found in scene graph, skipping")
+                continue
         if len(parents) > 0:
             parent = parents[0]
             rot = get_rotation(parent, scene_graph)
@@ -103,18 +120,30 @@ def preprocess_scene_graph(scene_graph):
         for elem in obj["placement"]["room_layout_elements"]:
             if elem["preposition"] == "in the corner" and elem["layout_element_id"] in ["middle of the room", "ceiling"]:
                 elem["preposition"] = "on"
+        # Filter out invalid object references
+        valid_objects_in_room = []
         for elem in obj["placement"]["objects_in_room"]:
+            # Skip room layout elements that were incorrectly placed in objects_in_room
+            if elem["object_id"] in ROOM_LAYOUT_ELEMENTS:
+                # Move to room_layout_elements instead
+                obj["placement"]["room_layout_elements"].append({
+                    "layout_element_id": elem["object_id"],
+                    "preposition": elem.get("preposition", "on")
+                })
+                continue
             if elem["object_id"] == "middle of the room":
-                # Delete that relationship
-                obj["placement"]["objects_in_room"] = [x for x in obj["placement"]["objects_in_room"] if x["object_id"] != "middle of the room"]
                 continue
             if elem["object_id"] not in [x["new_object_id"] for x in scene_graph]:
                 closest_id = next(iter([x["new_object_id"] for x in scene_graph if elem["object_id"] in x["new_object_id"]]), None)
                 if closest_id is not None:
                     elem["object_id"] = closest_id
+                    valid_objects_in_room.append(elem)
                 else:
-                    print(f"Object {elem['object_id']} not found in scene graph!")
-                    raise ValueError("Object not found in scene graph!")
+                    print(f"Warning: Object {elem['object_id']} not found in scene graph, skipping relationship")
+                    # Don't raise error, just skip this relationship
+            else:
+                valid_objects_in_room.append(elem)
+        obj["placement"]["objects_in_room"] = valid_objects_in_room
     return scene_graph
 
 def build_graph(scene_graph):

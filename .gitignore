@@ -1,3 +1,35 @@
 __pycache__/
 .cache/
+*.pyc
+
+# API keys / secrets
 OAI_CONFIG_LIST.json
+.env
+
+# Virtual environment
+.venv/
+
+# Generated outputs
+scene_graph.json
+scene.blend
+render.png
+Assets/
+
+# OpenShape (cloned/downloaded separately)
+openshape-demo-support/
+OpenShape-Embeddings/
+
+# Build artifacts
+*.egg-info/
+
+# Blender
+*.blend1
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

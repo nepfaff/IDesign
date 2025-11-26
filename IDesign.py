@@ -10,7 +10,7 @@ from refiner_agents import get_refiner_agents
 
 from chats import GroupChat, ChatWithEngineer, LayoutCorrectorGroupChat, ObjectDeletionGroupChat, LayoutRefinerGroupChat 
 
-from utils import get_room_priors, extract_list_from_json
+from utils import get_room_priors, extract_list_from_json, extract_json_from_response
 from utils import preprocess_scene_graph, build_graph, remove_unnecessary_edges, handle_under_prepositions, get_conflicts, get_size_conflicts, get_object_from_scene_graph
 from utils import get_object_from_scene_graph, get_rotation, get_cluster_objects, clean_and_extract_edges
 from utils import get_cluster_size
@@ -56,8 +56,8 @@ class IDesign:
             """,
         )
 
-        designer_response = json.loads(groupchat.messages[-2]["content"])
-        architect_response = json.loads(groupchat.messages[-1]["content"])
+        designer_response = json.loads(extract_json_from_response(groupchat.messages[-2]["content"]))
+        architect_response = json.loads(extract_json_from_response(groupchat.messages[-1]["content"]))
 
         blocks_designer, blocks_architect = extract_list_from_json(designer_response), extract_list_from_json(architect_response)
         if len(blocks_designer) != len(blocks_architect):
@@ -95,9 +95,9 @@ class IDesign:
                 """,
             )
             if json_data is None:
-                json_data = json.loads(chat_with_engineer.messages[-2]["content"])
+                json_data = json.loads(extract_json_from_response(chat_with_engineer.messages[-2]["content"]))
             else:
-                json_data["objects_in_room"] += json.loads(chat_with_engineer.messages[-2]["content"])["objects_in_room"]
+                json_data["objects_in_room"] += json.loads(extract_json_from_response(chat_with_engineer.messages[-2]["content"]))["objects_in_room"]
             
         self.scene_graph = json_data
 
@@ -167,7 +167,10 @@ class IDesign:
                     """,
                 )
                 correction = groupchat.messages[-1]
-                correction_json = json.loads(correction["content"])
+                correction_content = extract_json_from_response(correction["content"])
+                # Handle Python dict format (single quotes) vs JSON (double quotes)
+                correction_content = correction_content.replace("'", '"')
+                correction_json = json.loads(correction_content)
                 object_to_delete = correction_json["object_to_delete"]
                 descendants = nx.descendants(G, object_to_delete)
                 objs_to_delete = descendants.union({object_to_delete})
@@ -239,7 +242,7 @@ class IDesign:
                 """,
             )
 
-            new_relationships = json.loads(groupchat.messages[-2]["content"])
+            new_relationships = json.loads(extract_json_from_response(groupchat.messages[-2]["content"]))
             if "items" in new_relationships["children_objects"]:
                 new_relationships = {"children_objects" : new_relationships["children_objects"]["items"]}
             # Check whether the relationships are valid

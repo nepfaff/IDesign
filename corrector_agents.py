@@ -6,24 +6,22 @@ from autogen.agentchat.assistant_agent import AssistantAgent
 from copy import deepcopy
 from jsonschema import validate
 import json
+import os
 import re
 
 from schemas import layout_corrector_schema, deletion_schema
-from agents import is_termination_msg
+from agents import is_termination_msg, extract_json_from_content
 
 class JSONSchemaAgent(UserProxyAgent):
     def __init__(self, name : str, is_termination_msg):
-        super().__init__(name, is_termination_msg=is_termination_msg)
+        super().__init__(name, is_termination_msg=is_termination_msg, code_execution_config=False)
 
     def get_human_input(self, prompt: str) -> str:
         message = self.last_message()
         preps_layout = ["left-side", "right-side", "in the middle"]
         preps_objs = ['on', 'left of', 'right of', 'in front', 'behind', 'under', 'above']
 
-        pattern = r'```json\s*([^`]+)\s*```' # Match the json object
-        match = re.search(pattern, message["content"], re.DOTALL).group(1)
-
-        json_obj_new = json.loads(match)
+        json_obj_new = json.loads(extract_json_from_content(message["content"]))
 
         is_success  = False
         try:
@@ -40,12 +38,19 @@ class JSONSchemaAgent(UserProxyAgent):
             return "SUCCESS"
         return feedback
 
-config_list_gpt4 = autogen.config_list_from_json(
-    "OAI_CONFIG_LIST.json",
-    filter_dict={
-        "model": ["gpt-4-1106-preview"],
-    },
-)
+# Support both file-based config and OPENAI_API_KEY env var
+if os.path.exists("OAI_CONFIG_LIST.json"):
+    config_list_gpt4 = autogen.config_list_from_json(
+        "OAI_CONFIG_LIST.json",
+        filter_dict={
+            "model": ["gpt-4-1106-preview"],
+        },
+    )
+else:
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("Set OPENAI_API_KEY env var or create OAI_CONFIG_LIST.json")
+    config_list_gpt4 = [{"model": "gpt-4-1106-preview", "api_key": api_key}]
 
 gpt4_config = {
     "cache_seed": 42,
@@ -54,7 +59,7 @@ gpt4_config = {
     "timeout": 600,
 }
 gpt4_json_config = deepcopy(gpt4_config)
-gpt4_json_config["config_list"][0]["response_format"] = { "type": "json_object" }
+# Note: response_format is handled via system message JSON schema
 
 def get_corrector_agents():
     user_proxy = autogen.UserProxyAgent(

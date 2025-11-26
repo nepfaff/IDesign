@@ -3,25 +3,45 @@ from autogen.agentchat.agent import Agent
 from autogen.agentchat.user_proxy_agent import UserProxyAgent
 from autogen.agentchat.assistant_agent import AssistantAgent
 import json
+import os
+import re
 from jsonschema import validate
 from copy import deepcopy
 
 from schemas import initial_schema, interior_architect_schema, interior_designer_schema, engineer_schema
 
-config_list_gpt4_prev = autogen.config_list_from_json(
-    "OAI_CONFIG_LIST.json",
-    filter_dict={
-        "model": ["gpt-4-1106-preview"],
-    },
-)
 
-# OAI_CONFIG_LIST.json is needed! Check the Autogen repo for more info!
-config_list_gpt4 = autogen.config_list_from_json(
-    "OAI_CONFIG_LIST.json",
-    filter_dict={
-        "model": ["gpt-4"],
-    },
-)
+def extract_json_from_content(content):
+    """Extract JSON from content that may contain markdown code blocks."""
+    if not content:
+        return content
+    pattern = r'```(?:json)?\s*([^`]+)\s*```'
+    match = re.search(pattern, content, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return content
+
+# Support both file-based config and OPENAI_API_KEY env var
+if os.path.exists("OAI_CONFIG_LIST.json"):
+    config_list_gpt4_prev = autogen.config_list_from_json(
+        "OAI_CONFIG_LIST.json",
+        filter_dict={
+            "model": ["gpt-4-1106-preview"],
+        },
+    )
+    config_list_gpt4 = autogen.config_list_from_json(
+        "OAI_CONFIG_LIST.json",
+        filter_dict={
+            "model": ["gpt-4"],
+        },
+    )
+else:
+    # Fall back to OPENAI_API_KEY env var
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("Set OPENAI_API_KEY env var or create OAI_CONFIG_LIST.json")
+    config_list_gpt4_prev = [{"model": "gpt-4-1106-preview", "api_key": api_key}]
+    config_list_gpt4 = [{"model": "gpt-4", "api_key": api_key}]
 
 gpt4_prev_config = {
     "cache_seed": 42,
@@ -41,11 +61,11 @@ gpt4_config = {
 
 gpt4_json_config = deepcopy(gpt4_prev_config)
 gpt4_json_config["temperature"] = 0.7
-gpt4_json_config["config_list"][0]["response_format"] = { "type": "json_object" }
+# Note: response_format is handled via system message JSON schema
 
 gpt4_json_engineer_config = deepcopy(gpt4_prev_config)
 gpt4_json_engineer_config["temperature"] = 0.0
-gpt4_json_engineer_config["config_list"][0]["response_format"] = { "type": "json_object" }
+# Note: response_format is handled via system message JSON schema
 
 def is_termination_msg(content) -> bool:
     have_content = content.get("content", None) is not None
@@ -56,14 +76,14 @@ def is_termination_msg(content) -> bool:
 
 class JSONSchemaAgent(UserProxyAgent):
     def __init__(self, name : str, is_termination_msg):
-        super().__init__(name, is_termination_msg=is_termination_msg)
+        super().__init__(name, is_termination_msg=is_termination_msg, code_execution_config=False)
 
     def get_human_input(self, prompt: str) -> str:
         message = self.last_message()
         preps_layout = ['in front', 'on', 'in the corner', 'in the middle of']
         preps_objs = ['on', 'left of', 'right of', 'in front', 'behind', 'under', 'above']
 
-        json_obj_new = json.loads(message["content"])
+        json_obj_new = json.loads(extract_json_from_content(message["content"]))
         try:
             json_obj_new_ids = [item["new_object_id"] for item in json_obj_new["objects_in_room"]]
         except:
