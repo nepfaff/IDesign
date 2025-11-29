@@ -11,20 +11,24 @@ import objaverse
 from torch.nn import functional as F
 import re
 
+# Get script directory for shared resources (embeddings cache)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+EMBEDDINGS_DIR = os.path.join(SCRIPT_DIR, "OpenShape-Embeddings")
+
 #Print device
 print("Device: ", torch.cuda.get_device_name(0))
 
 # Load the Pointcloud Encoder
 pc_encoder = openshape.load_pc_encoder('openshape-pointbert-vitg14-rgb')
 
-# Get the pre-computed embeddings
+# Get the pre-computed embeddings (stored in script directory, not cwd)
 meta = json.load(
-    open(hf_hub_download("OpenShape/openshape-objaverse-embeddings", "objaverse_meta.json", token=True, repo_type='dataset', local_dir = "OpenShape-Embeddings"))
+    open(hf_hub_download("OpenShape/openshape-objaverse-embeddings", "objaverse_meta.json", token=True, repo_type='dataset', local_dir=EMBEDDINGS_DIR))
 )
 
 meta = {x['u']: x for x in meta['entries']}
 deser = torch.load(
-    hf_hub_download("OpenShape/openshape-objaverse-embeddings", "objaverse.pt", token=True, repo_type='dataset', local_dir = "OpenShape-Embeddings"), map_location='cpu'
+    hf_hub_download("OpenShape/openshape-objaverse-embeddings", "objaverse.pt", token=True, repo_type='dataset', local_dir=EMBEDDINGS_DIR), map_location='cpu'
 )
 us = deser['us']
 feats = deser['feats']
