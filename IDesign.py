@@ -355,23 +355,28 @@ class IDesign:
             print("Topological order: ", topological_order)
         
         d = 1
-        depth1_retries = 0
-        max_depth1_retries = 10
-        while d <= max_depth:   
+        node_failures = {}  # Track failures per object
+        max_node_retries = 3  # Max retries per specific object before skipping
+        while d <= max_depth:
             if verbose:
                 print("Depth: ", d)
             error_flag = False
-            
+
             # Get nodes at the current depth
             nodes = [node for node in topological_order if depth_scene_graph[node] == d]
             if verbose:
                 print(f"Nodes at depth {d}:", nodes)
-            
+
             errors = {}
             for node in nodes:
                 if point_bbox[node]:
                     continue
-                
+
+                # Skip objects that have failed too many times
+                if node_failures.get(node, 0) >= max_node_retries:
+                    print(f"SKIPPING {node}: exceeded {max_node_retries} placement attempts")
+                    continue
+
                 # Find the object corresponding to the current node
                 obj = next(item for item in scene_graph_wo_layout if item["new_object_id"] == node)
                 errors = place_object(obj, self.scene_graph, self.room_dimensions, errors={}, verbose=verbose)
@@ -379,15 +384,13 @@ class IDesign:
                     print(f"Errors for {obj['new_object_id']}:", errors)
 
                 if errors:
+                    node_failures[node] = node_failures.get(node, 0) + 1
+
                     if d > 1:
                         d -= 1
                         if verbose:
                             print("Reducing depth to: ", d)
-                    else:
-                        depth1_retries += 1
-                        if depth1_retries > max_depth1_retries:
-                            print(f"WARNING: Giving up on depth 1 after {max_depth1_retries} retries. Some objects may not be placed.")
-                            break
+                    # At depth 1, don't decrement - just continue to retry with remaining objects
 
                     error_flag = True
                     # Delete positions for objects at or beyond the current depth
@@ -399,10 +402,6 @@ class IDesign:
                                 del del_item["position"]
                     errors = {}
                     break
-
-            # Break outer loop if we've exhausted depth-1 retries
-            if d == 1 and depth1_retries > max_depth1_retries:
-                break
 
             if not error_flag:
                 d += 1
