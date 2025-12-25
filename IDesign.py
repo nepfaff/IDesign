@@ -355,6 +355,8 @@ class IDesign:
             print("Topological order: ", topological_order)
         
         d = 1
+        depth1_retries = 0
+        max_depth1_retries = 10
         while d <= max_depth:   
             if verbose:
                 print("Depth: ", d)
@@ -381,7 +383,12 @@ class IDesign:
                         d -= 1
                         if verbose:
                             print("Reducing depth to: ", d)
-                    
+                    else:
+                        depth1_retries += 1
+                        if depth1_retries > max_depth1_retries:
+                            print(f"WARNING: Giving up on depth 1 after {max_depth1_retries} retries. Some objects may not be placed.")
+                            break
+
                     error_flag = True
                     # Delete positions for objects at or beyond the current depth
                     for del_item in scene_graph_wo_layout:
@@ -392,7 +399,11 @@ class IDesign:
                                 del del_item["position"]
                     errors = {}
                     break
-                            
+
+            # Break outer loop if we've exhausted depth-1 retries
+            if d == 1 and depth1_retries > max_depth1_retries:
+                break
+
             if not error_flag:
                 d += 1
         if verbose:

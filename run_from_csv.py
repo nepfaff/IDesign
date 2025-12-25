@@ -20,8 +20,8 @@ from pathlib import Path
 from generate_scene import generate_scene
 
 # Default paths
-CSV_FILE = "/home/ubuntu/hsm/prompts.csv"
-RESULTS_DIR = "./data/scenes_batch"
+CSV_FILE = str(Path.home() / "SceneEval/input/annotations.csv")
+RESULTS_DIR = "./data/sceneval_results"
 BLENDER_PATH = "/home/ubuntu/blender-4.2.0-linux-x64/blender"
 
 
