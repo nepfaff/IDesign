@@ -132,6 +132,8 @@ MSH_OBJS = [m for m in bpy.context.scene.objects if m.type == 'MESH']
 for OBJS in MSH_OBJS:
     # Remove "-joined" suffix if present, but preserve hyphens in object names
     obj_name = OBJS.name.replace("-joined", "") if OBJS.name.endswith("-joined") else OBJS.name
+    if obj_name not in objects_in_room:
+        continue  # Skip orphan meshes from GLB imports
     item = objects_in_room[obj_name]
     object_position = (item["position"]["x"], item["position"]["y"], item["position"]["z"])  # X, Y, and Z coordinates
     object_rotation_z = (item["rotation"]["z_angle"] / 180.0) * math.pi + math.pi # Rotation angles in radians around the X, Y, and Z axes

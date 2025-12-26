@@ -23,6 +23,7 @@ from generate_scene import generate_scene
 CSV_FILE = str(Path.home() / "SceneEval/input/annotations.csv")
 RESULTS_DIR = "./data/sceneval_results"
 BLENDER_PATH = "/home/ubuntu/blender-4.2.0-linux-x64/blender"
+MAX_RETRIES = 10
 
 
 def run_retrieve(scene_dir: Path, script_dir: Path) -> bool:
@@ -202,40 +203,45 @@ Examples:
         print(f"Output: {scene_dir}")
         print(f"{'='*60}\n")
 
-        try:
-            # Stage 1: Generate scene graph
-            output_file = scene_dir / "scene_graph.json"
-            print("[Stage 1/3] Generating scene graph...")
-            generate_scene(
-                prompt=description,
-                output_file=str(output_file),
-                auto_mode=args.auto,
-                verbose=args.verbose,
-            )
-            print(f"  Scene graph saved to: {output_file}")
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                # Stage 1: Generate scene graph
+                output_file = scene_dir / "scene_graph.json"
+                print(f"[Stage 1/3] Generating scene graph... (attempt {attempt}/{MAX_RETRIES})")
+                generate_scene(
+                    prompt=description,
+                    output_file=str(output_file),
+                    auto_mode=args.auto,
+                    verbose=args.verbose,
+                )
+                print(f"  Scene graph saved to: {output_file}")
 
-            # Stage 2: Retrieve assets
-            if not args.skip_retrieve:
-                print("\n[Stage 2/3] Retrieving 3D assets...")
-                run_retrieve(scene_dir, script_dir)
-            else:
-                print("\n[Stage 2/3] Skipping asset retrieval")
+                # Stage 2: Retrieve assets
+                if not args.skip_retrieve:
+                    print("\n[Stage 2/3] Retrieving 3D assets...")
+                    run_retrieve(scene_dir, script_dir)
+                else:
+                    print("\n[Stage 2/3] Skipping asset retrieval")
 
-            # Stage 3: Render in Blender
-            if not args.skip_render:
-                print("\n[Stage 3/3] Rendering in Blender...")
-                run_blender(scene_dir, script_dir)
-            else:
-                print("\n[Stage 3/3] Skipping Blender rendering")
+                # Stage 3: Render in Blender
+                if not args.skip_render:
+                    print("\n[Stage 3/3] Rendering in Blender...")
+                    run_blender(scene_dir, script_dir)
+                else:
+                    print("\n[Stage 3/3] Skipping Blender rendering")
 
-            print(f"\nScene {prompt_id} completed successfully!")
-            successful += 1
+                print(f"\nScene {prompt_id} completed successfully on attempt {attempt}!")
+                successful += 1
+                break  # Success - exit retry loop
 
-        except Exception as e:
-            print(f"\nError generating scene {prompt_id}: {e}")
-            traceback.print_exc()
-            failed += 1
-            continue
+            except Exception as e:
+                print(f"\nAttempt {attempt}/{MAX_RETRIES} failed for scene {prompt_id}: {e}")
+                traceback.print_exc()
+                if attempt == MAX_RETRIES:
+                    print(f"Scene {prompt_id} failed after {MAX_RETRIES} attempts")
+                    failed += 1
+                else:
+                    print("Retrying...")
 
     print(f"\n{'='*60}")
     print(f"Batch complete!")
