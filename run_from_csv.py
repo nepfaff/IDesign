@@ -7,6 +7,7 @@ Usage:
     python run_from_csv.py --csv_file prompts.csv --results_dir ./scenes
     python run_from_csv.py --start_id 5 --end_id 10
     python run_from_csv.py --skip_retrieve --skip_render  # Scene graph only
+    python run_from_csv.py --skip_existing               # Skip scenes with render.png
 """
 
 import argparse
@@ -105,6 +106,7 @@ Examples:
   %(prog)s --start_id 5 --end_id 10           # Process only IDs 5-10
   %(prog)s --auto                             # Use GPT-4 for room parameters
   %(prog)s --skip_retrieve --skip_render      # Generate scene graphs only
+  %(prog)s --skip_existing                    # Skip scenes with existing render.png
         """
     )
 
@@ -153,6 +155,11 @@ Examples:
         action="store_true",
         help="Skip Blender rendering step"
     )
+    parser.add_argument(
+        "--skip_existing",
+        action="store_true",
+        help="Skip scenes that already have a render.png"
+    )
 
     args = parser.parse_args()
 
@@ -170,6 +177,7 @@ Examples:
     print(f"Auto mode: {args.auto}")
     print(f"Skip retrieve: {args.skip_retrieve}")
     print(f"Skip render: {args.skip_render}")
+    print(f"Skip existing: {args.skip_existing}")
     print(f"{'='*60}\n")
 
     # Read prompts from CSV
@@ -196,6 +204,14 @@ Examples:
 
         description = row["Description"]
         scene_dir = results_dir / f"scene_{prompt_id:03d}"
+        render_file = scene_dir / "render.png"
+
+        # Skip if render already exists
+        if args.skip_existing and render_file.exists():
+            print(f"Skipping scene {prompt_id} (render.png exists)")
+            skipped += 1
+            continue
+
         scene_dir.mkdir(parents=True, exist_ok=True)
 
         print(f"\n{'='*60}")
@@ -219,14 +235,20 @@ Examples:
                 # Stage 2: Retrieve assets
                 if not args.skip_retrieve:
                     print("\n[Stage 2/3] Retrieving 3D assets...")
-                    run_retrieve(scene_dir, script_dir)
+                    if not run_retrieve(scene_dir, script_dir):
+                        raise RuntimeError("Asset retrieval failed")
                 else:
                     print("\n[Stage 2/3] Skipping asset retrieval")
 
                 # Stage 3: Render in Blender
                 if not args.skip_render:
                     print("\n[Stage 3/3] Rendering in Blender...")
-                    run_blender(scene_dir, script_dir)
+                    if not run_blender(scene_dir, script_dir):
+                        raise RuntimeError("Blender rendering failed")
+
+                    # Verify render.png was created
+                    if not render_file.exists():
+                        raise RuntimeError(f"render.png not found after Blender execution")
                 else:
                     print("\n[Stage 3/3] Skipping Blender rendering")
 
