@@ -13,6 +13,7 @@ Usage:
 import argparse
 import csv
 import os
+import signal
 import subprocess
 import sys
 import traceback
@@ -25,6 +26,17 @@ CSV_FILE = str(Path.home() / "SceneEval/input/annotations.csv")
 RESULTS_DIR = "./data/sceneval_results"
 BLENDER_PATH = "/home/ubuntu/blender-4.2.0-linux-x64/blender"
 MAX_RETRIES = 10
+DEFAULT_TIMEOUT = 3600  # 60 minutes per scene attempt
+
+
+class SceneTimeoutError(Exception):
+    """Raised when scene generation exceeds timeout."""
+    pass
+
+
+def timeout_handler(signum, frame):
+    """Signal handler for SIGALRM."""
+    raise SceneTimeoutError("Scene generation timed out")
 
 
 def run_retrieve(scene_dir: Path, script_dir: Path) -> bool:
@@ -160,6 +172,12 @@ Examples:
         action="store_true",
         help="Skip scenes that already have a render.png"
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help=f"Timeout per scene attempt in seconds (default: {DEFAULT_TIMEOUT} = 30 min)"
+    )
 
     args = parser.parse_args()
 
@@ -178,6 +196,7 @@ Examples:
     print(f"Skip retrieve: {args.skip_retrieve}")
     print(f"Skip render: {args.skip_render}")
     print(f"Skip existing: {args.skip_existing}")
+    print(f"Timeout: {args.timeout}s ({args.timeout // 60} min)")
     print(f"{'='*60}\n")
 
     # Read prompts from CSV
@@ -221,6 +240,10 @@ Examples:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
+                # Set up timeout for this attempt
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(args.timeout)
+
                 # Stage 1: Generate scene graph
                 output_file = scene_dir / "scene_graph.json"
                 print(f"[Stage 1/3] Generating scene graph... (attempt {attempt}/{MAX_RETRIES})")
@@ -252,11 +275,24 @@ Examples:
                 else:
                     print("\n[Stage 3/3] Skipping Blender rendering")
 
+                # Cancel timeout on success
+                signal.alarm(0)
+
                 print(f"\nScene {prompt_id} completed successfully on attempt {attempt}!")
                 successful += 1
                 break  # Success - exit retry loop
 
+            except SceneTimeoutError:
+                signal.alarm(0)  # Cancel any pending alarm
+                print(f"\nAttempt {attempt}/{MAX_RETRIES} TIMED OUT for scene {prompt_id} (>{args.timeout}s)")
+                if attempt == MAX_RETRIES:
+                    print(f"Scene {prompt_id} failed after {MAX_RETRIES} attempts (all timed out)")
+                    failed += 1
+                else:
+                    print("Retrying...")
+
             except Exception as e:
+                signal.alarm(0)  # Cancel any pending alarm
                 print(f"\nAttempt {attempt}/{MAX_RETRIES} failed for scene {prompt_id}: {e}")
                 traceback.print_exc()
                 if attempt == MAX_RETRIES:
