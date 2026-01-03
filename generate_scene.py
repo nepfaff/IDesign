@@ -78,7 +78,15 @@ Respond with ONLY a JSON object in this exact format:
         if match:
             content = match.group(1).strip()
 
-    return json.loads(content)
+    # Try to parse directly first, then extract JSON object if that fails
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        # LLM sometimes adds extra text after JSON - extract just the JSON object
+        match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        raise  # Re-raise if we can't find valid JSON
 
 
 # Default room configurations based on room type

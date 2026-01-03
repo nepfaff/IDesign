@@ -78,9 +78,13 @@ def rescale_object(obj, scale):
     # Ensure the object has a mesh data
     if obj.type == 'MESH':
         bbox_dimensions = obj.dimensions
+        # Avoid division by zero for degenerate meshes
+        if bbox_dimensions.x <= 0 or bbox_dimensions.y <= 0 or bbox_dimensions.z <= 0:
+            print(f"Warning: {obj.name} has zero/negative dimensions, skipping rescale")
+            return
         scale_factors = (
-                         scale["length"] / bbox_dimensions.x, 
-                         scale["width"] / bbox_dimensions.y, 
+                         scale["length"] / bbox_dimensions.x,
+                         scale["width"] / bbox_dimensions.y,
                          scale["height"] / bbox_dimensions.z
                         )
         obj.scale = scale_factors
@@ -135,9 +139,23 @@ for OBJS in MSH_OBJS:
     if obj_name not in objects_in_room:
         continue  # Skip orphan meshes from GLB imports
     item = objects_in_room[obj_name]
+
+    # Skip objects missing position data (incomplete scene graphs)
+    if "position" not in item or item.get("position") is None:
+        print(f"Skipping {obj_name}: missing position data")
+        # Delete the object since we can't place it
+        bpy.data.objects.remove(OBJS, do_unlink=True)
+        continue
+
+    # Skip objects missing rotation data
+    if "rotation" not in item or item.get("rotation") is None:
+        print(f"Skipping {obj_name}: missing rotation data")
+        bpy.data.objects.remove(OBJS, do_unlink=True)
+        continue
+
     object_position = (item["position"]["x"], item["position"]["y"], item["position"]["z"])  # X, Y, and Z coordinates
     object_rotation_z = (item["rotation"]["z_angle"] / 180.0) * math.pi + math.pi # Rotation angles in radians around the X, Y, and Z axes
-    
+
     bpy.ops.object.select_all(action='DESELECT')
     OBJS.select_set(True)
     OBJS.location = object_position

@@ -199,7 +199,11 @@ def find_room_layout_conflicts(G, scene_graph):
                     # node_layout[node] = parents_room_layout
                     node_layout[node] = {}
             else:
-                node_layout[node] = parents_room_layout[0]
+                # Handle empty parents_room_layout (orphan nodes)
+                if parents_room_layout:
+                    node_layout[node] = parents_room_layout[0]
+                else:
+                    node_layout[node] = {}
 
         if node in ROOM_LAYOUT_ELEMENTS:
             node_layout[node] = node

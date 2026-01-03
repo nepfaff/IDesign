@@ -60,13 +60,31 @@ class IDesign:
         architect_response = json.loads(extract_json_from_response(groupchat.messages[-1]["content"]))
 
         blocks_designer, blocks_architect = extract_list_from_json(designer_response), extract_list_from_json(architect_response)
-        if len(blocks_designer) != len(blocks_architect):
-            print("Lengths: ", len(blocks_designer), len(blocks_architect))
-            raise ValueError("The number of blocks from the designer and architect should be the same! Please generate again.")
-        
+
+        # Match architect blocks to designer blocks by object name (case-insensitive)
+        # This handles cases where agents produce different counts
+        architect_by_name = {}
+        for a_block in blocks_architect:
+            obj_name = a_block.get("Object", "").strip().lower()
+            if obj_name:
+                architect_by_name[obj_name] = a_block
+
+        # Build matched pairs, skipping designer objects without architect placements
+        matched_pairs = []
+        for d_block in blocks_designer:
+            obj_name = d_block.get("Object name", "").strip().lower()
+            a_block = architect_by_name.get(obj_name)
+            if a_block is None:
+                print(f"Warning: No architect placement for '{obj_name}', skipping")
+                continue
+            matched_pairs.append((d_block, a_block))
+
+        if not matched_pairs:
+            raise ValueError("No matching objects between designer and architect responses!")
+
         json_data = None
 
-        for d_block, a_block in zip(blocks_designer, blocks_architect):
+        for d_block, a_block in matched_pairs:
             engineer.reset(), json_schema_debugger.reset()
             prompt = str(d_block) + "\n" + str(a_block)
 

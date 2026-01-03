@@ -3,11 +3,11 @@
 Run IDesign scene generation for all prompts in a CSV file.
 
 Usage:
-    python run_from_csv.py
-    python run_from_csv.py --csv_file prompts.csv --results_dir ./scenes
-    python run_from_csv.py --start_id 5 --end_id 10
-    python run_from_csv.py --skip_retrieve --skip_render  # Scene graph only
-    python run_from_csv.py --skip_existing               # Skip scenes with render.png
+    python run_from_csv.py                                  # Use defaults (writes to EFS)
+    python run_from_csv.py --results_dir ./local_scenes     # Custom output directory
+    python run_from_csv.py --start_id 5 --end_id 10         # Process only IDs 5-10
+    python run_from_csv.py --skip_retrieve --skip_render    # Scene graph only
+    python run_from_csv.py --skip_existing                  # Skip scenes with render.png
 """
 
 import argparse
@@ -23,7 +23,7 @@ from generate_scene import generate_scene
 
 # Default paths
 CSV_FILE = str(Path.home() / "SceneEval/input/annotations.csv")
-RESULTS_DIR = "./data/sceneval_results"
+RESULTS_DIR = str(Path.home() / "efs/nicholas/scene-agent-eval-scenes/IDesign")
 BLENDER_PATH = "/home/ubuntu/blender-4.2.0-linux-x64/blender"
 MAX_RETRIES = 10
 DEFAULT_TIMEOUT = 3600  # 60 minutes per scene attempt
